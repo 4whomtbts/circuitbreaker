@@ -1,0 +1,27 @@
+# It defines behavior of circuitbreaking
+# soft : Stop all containers only
+# hard : Stop(turn off) host machine
+circuitBreakerLevel: soft
+watchInterval: 1500
+
+# Cpu temperature that triggers circuitbreaking.
+cpuTriggerPoint: 90
+# 서킷브레이킹이 발동하기 위해 만족시켜야하는 cpuTriggerPoint를 넘은 CPU의 개수
+cpuTolerableNumber: 1
+
+# Gpu temperature that triggers circuitbreaking.
+gpuTriggerPoint: 90
+gpuTolerableNumber: 1
+
+#nodeExporters: ["192.168.1.11:9100", "192.168.1.12:9100"]
+#dcgmExporters: ["192.168.1.11:9400", "192.168.1.12:9400"]
+nodeExporters: ["127.0.0.1:9100"]
+dcgmExporters: ["127.0.0.1:9400"]
+# List of email receivers
+emails: ["4whomtbts@gmail.com", "foo@gmail.com"]
+emailSender: "ailabsysmanager.dgu@gmail.com"
+emailSenderPwd: 1234
+sshUser: circuitbreaker
+sshPwd: password
+excludedImages: ["nvcr.io/dcgm_exporter", "important_image"]
+
