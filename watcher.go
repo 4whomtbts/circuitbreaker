@@ -65,12 +65,12 @@ func (w *Watcher) shouldCircuitBreakingNodeExporterMetric(hostname, metricStr st
 	for _, metric := range metrics {
 		//fmt.Println(metric)
 		if strings.Contains(metric, NODE_HOWMON_TEMP_CELSIUS) {
-			splitted := strings.Split(metric, " ")
-			if len(splitted) < 2 {
+			tok := strings.Split(metric, " ")
+			if len(tok) < 2 {
 				log.Errorf("%s 의 온도 정보가 올바르지 않습니다.", hostname)
 				continue
 			}
-			temp, err :=  strconv.Atoi(splitted[1])
+			temp, err :=  strconv.Atoi(tok[1])
 			if err != nil {
 				log.Errorf("%s 의 온도 정보의 포맷이 올바르지 않습니다.", hostname)
 				continue
@@ -104,25 +104,43 @@ func (w *Watcher) fetchNodeExporterMetric(channel <- chan ExporterMetric, metric
 
 }
 
-func (w *Watcher) collectMetric(metricChan <- chan *metric.ExporterMetric, metricEndpoints []string) {
+func (w *Watcher) collectMetric(metricChan chan *metric.ExporterMetric, collectDone chan bool, metricEndpoints []string) {
 	for _, metricHost := range metricEndpoints {
 		go w.collector.Collect(metricChan, metricHost)
 	}
+	collectDone<-true
 }
 
-func (w *Watcher) ProcessMetric() {
+func (w *Watcher) ProcessMetric() ([]string, []string){
+	var breaked_list []string
+	var repaired_list []string
+
 	rawMetricChan := make(chan *metric.ExporterMetric)
+	collecDone := make(chan bool)
 	merged := append(w.nodeExporters, w.dcgmExporters...)
 
-	w.collectMetric(rawMetricChan, merged)
+	w.collectMetric(rawMetricChan, collecDone, merged)
 
 	for {
 		select {
 			case rawMetric := <- rawMetricChan:
 				concreteMetric := metric.NewMetric(rawMetric)
 				rst := concreteMetric.Diagnose()
-				w.circuitBreaker.Break(rst.MetricType, rst.CircuitBreakCandidates)
-				w.circuitBreaker.Repair(rst.MetricType, rst.CircuitRecoveryCandidates)
+				breakCandidates := rst.CircuitBreakCandidates
+				for _, cand := range breakCandidates {
+					if rst := w.circuitBreaker.Break(rst.MetricType, cand); rst {
+						breaked_list = append(breaked_list, cand)
+					}
+
+				}
+				reapirCandidates := rst.CircuitRepairCandidates
+				for _, cand := range reapirCandidates {
+					if rst := w.circuitBreaker.Repair(rst.MetricType, cand); rst {
+						repaired_list = append(repaired_list, cand)
+					}
+				}
+		    case <-collecDone:
+				return breaked_list, repaired_list
 		}
 	}
 }

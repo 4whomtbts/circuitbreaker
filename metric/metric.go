@@ -11,10 +11,17 @@ type ExporterMetric struct {
 	Metric string
 }
 
+func NewExporterMetric(metricHost, metric string) *ExporterMetric {
+	return &ExporterMetric{
+		MetricHost: metricHost,
+		Metric:     metric,
+	}
+}
+
 type MetricDiagnosisResult struct {
 	MetricType string
 	CircuitBreakCandidates []string
-	CircuitRecoveryCandidates []string
+	CircuitRepairCandidates []string
 }
 
 func NewMetric(rawMetric *ExporterMetric) Metric {

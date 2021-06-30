@@ -1,13 +1,9 @@
 package main
 
-import (
-	"circuitbreaker/metric_collector"
-	"testing"
-)
-
 var fakeNodeExporterMetric =
 "node_fake_some_elem{device=\"sda3\"}\nnode_hwmon_temp_celsius{chip=\"platform_coretemp_1\",sensor=\"temp2\"} 90\n"
 
+/*
 func TestProcessMetric(t *testing.T) {
 	w := NewWatcher(&CpuConfig{
 		triggerPoint:    10,
@@ -19,7 +15,7 @@ func TestProcessMetric(t *testing.T) {
 
 	w.ProcessMetric()
 }
-
+*/
 /*
 func TestShouldCircuitBreakingNodeExporterMetric_WHEN_overheated_cpu_is_more_than_tolerable_num_THAN_True(t *testing.T) {
 
