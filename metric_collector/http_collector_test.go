@@ -10,10 +10,10 @@ type fakeHttpClient struct {
 	fakeMessage string
 }
 
-func (fh *fakeHttpClient) Get(url string) (httpResponse, error) {
-	return httpResponse{
-		statusCode: 200,
-		body: fh.fakeMessage,
+func (fh *fakeHttpClient) Get(url string) (HttpResponse, error) {
+	return HttpResponse{
+		StatusCode: 200,
+		Body: fh.fakeMessage,
 	}, nil
 }
 

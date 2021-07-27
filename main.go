@@ -1,6 +1,7 @@
 package main
 
 import (
+	config2 "circuitbreaker/config"
 	"fmt"
 	"github.com/pborman/getopt"
 	log "github.com/sirupsen/logrus"
@@ -13,7 +14,7 @@ func main() {
 	configFilePath := getopt.StringLong("config-file", 'c', "/etc/ccb/circuitbreaker.yaml", "Configuration for circuitbreaker")
 	getopt.Parse()
 	println(*configFilePath)
-	var config CcbConfig
+	var config config2.CcbConfig
 	configFile, err := ioutil.ReadFile(*configFilePath)
 	if err != nil {
 		log.Errorf("%s  에 설정파일이 존재하지 않습니다", *configFilePath)

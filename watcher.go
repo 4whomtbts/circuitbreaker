@@ -2,6 +2,7 @@ package main
 
 import (
 	"circuitbreaker/circuitbreaker"
+	"circuitbreaker/config"
 	"circuitbreaker/metric"
 	"circuitbreaker/metric_collector"
 	"database/sql"
@@ -14,8 +15,8 @@ import (
 
 type Watcher struct {
 	mutex *sync.Mutex
-	cpuConfig *CpuConfig
-	gpuConfig *GpuConfig
+	cpuConfig *config.CpuConfig
+	gpuConfig *config.GpuConfig
 	nodeExporters []string
 	dcgmExporters []string
 	collector metric_collector.MetricCollector
@@ -23,7 +24,6 @@ type Watcher struct {
 	db *sql.DB
 	cpuTriggerPoint int
 	gpuTriggerPoint int
-	brakedHostCache []string
 	restClient *resty.Client
 }
 
@@ -32,8 +32,8 @@ const (
 	GPU_BRAKE = "GPU_BRAKE"
 )
 
-func NewWatcher(cpuConfig *CpuConfig, gpuConfig *GpuConfig, nodeExporters []string, dcgmExporters []string, db *sql.DB, mc metric_collector.MetricCollector) *Watcher {
-
+func NewWatcher(cpuConfig *config.CpuConfig, gpuConfig *config.GpuConfig, nodeExporters []string,
+	dcgmExporters []string, db *sql.DB, mc metric_collector.MetricCollector) *Watcher {
 	return &Watcher{
 		mutex: &sync.Mutex{},
 		cpuConfig: cpuConfig,
@@ -43,12 +43,7 @@ func NewWatcher(cpuConfig *CpuConfig, gpuConfig *GpuConfig, nodeExporters []stri
 		collector: mc,
 		db: db,
 		restClient: resty.New(),
-	}
-}
-
-func (w *Watcher) run() {
-	for ;; {
-
+		circuitBreaker: &circuitbreaker.SoftCircuitBreaker{},
 	}
 }
 
@@ -81,7 +76,7 @@ func (w *Watcher) shouldCircuitBreakingNodeExporterMetric(hostname, metricStr st
 			}
 		}
 	}
-	if tolerableCount >= w.cpuConfig.tolerableNumber {
+	if tolerableCount >= w.cpuConfig.TolerableNumber {
 		return overheated
 	}
 
@@ -99,16 +94,10 @@ func (w *Watcher) shouldCircuitBreakingNodeExporterMetric(hostname, metricStr st
 	return []string{}
 }
 
-func (w *Watcher) fetchNodeExporterMetric(channel <- chan ExporterMetric, metricHost string) {
-
-
-}
-
-func (w *Watcher) collectMetric(metricChan chan *metric.ExporterMetric, collectDone chan bool, metricEndpoints []string) {
+func (w *Watcher) collectMetric(metricChan chan *metric.ExporterMetric, metricEndpoints []string) {
 	for _, metricHost := range metricEndpoints {
 		go w.collector.Collect(metricChan, metricHost)
 	}
-	collectDone<-true
 }
 
 func (w *Watcher) ProcessMetric() ([]string, []string){
@@ -116,31 +105,42 @@ func (w *Watcher) ProcessMetric() ([]string, []string){
 	var repaired_list []string
 
 	rawMetricChan := make(chan *metric.ExporterMetric)
-	collecDone := make(chan bool)
 	merged := append(w.nodeExporters, w.dcgmExporters...)
+	totalExports := len(merged)
 
-	w.collectMetric(rawMetricChan, collecDone, merged)
+	go w.collectMetric(rawMetricChan, merged)
 
-	for {
+	cnt := 0
+	loop := true
+	for loop {
 		select {
-			case rawMetric := <- rawMetricChan:
-				concreteMetric := metric.NewMetric(rawMetric)
-				rst := concreteMetric.Diagnose()
-				breakCandidates := rst.CircuitBreakCandidates
-				for _, cand := range breakCandidates {
-					if rst := w.circuitBreaker.Break(rst.MetricType, cand); rst {
-						breaked_list = append(breaked_list, cand)
-					}
+		case rawMetric := <- rawMetricChan:
+			concreteMetric, err := metric.NewMetric(w.cpuConfig, w.gpuConfig, rawMetric)
+			if err != nil {
+				cnt++
+				continue
+			}
 
+			rst := concreteMetric.Diagnose()
+
+			host := rawMetric.MetricHost
+			if rst.ShouldBreak {
+				if rst := w.circuitBreaker.Break(rst.MetricType, host); rst {
+					breaked_list = append(breaked_list, host)
 				}
-				reapirCandidates := rst.CircuitRepairCandidates
-				for _, cand := range reapirCandidates {
-					if rst := w.circuitBreaker.Repair(rst.MetricType, cand); rst {
-						repaired_list = append(repaired_list, cand)
-					}
+			}
+
+			if rst.ShouldRepair {
+				if rst := w.circuitBreaker.Repair(rst.MetricType, host); rst {
+					repaired_list = append(repaired_list, host)
 				}
-		    case <-collecDone:
-				return breaked_list, repaired_list
+			}
+			cnt++
+			if cnt == totalExports {
+				loop = false
+				break
+			}
 		}
 	}
+	return breaked_list, repaired_list
 }
